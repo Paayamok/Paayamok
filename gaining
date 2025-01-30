@@ -1,0 +1,93 @@
+import os
+import shutil
+import re
+import time
+import datetime
+
+# 源文件夹
+source_folder = '/Users/jinjin/PycharmProjects/PythonProject/郭煜周'
+# 目标文件夹
+destination_folder = '/Users/jinjin/PycharmProjects/PythonProject/郭煜周'
+
+# 正则匹配规则：匹配 **文件名最后出现的 YYYY.MM.DD**
+pattern = re.compile(r'(\d{4})\.(\d{2})\.(\d{2})')
+
+
+def get_file_date(file_path):
+    """获取文件创建日期，如果不可用则使用修改日期"""
+    if os.name == 'nt':  # Windows 获取创建时间
+        created_time = os.path.getctime(file_path)
+    else:  # Linux/macOS 可能不支持创建时间，使用 `st_birthtime` 或修改时间
+        stat = os.stat(file_path)
+        created_time = getattr(stat, 'st_birthtime', stat.st_mtime)
+
+    # 转换为 YYYYMMDD 格式
+    return datetime.datetime.fromtimestamp(created_time).strftime('%Y%m%d')
+
+
+def rename_file(file_path):
+    """重命名文件为 'YYYYMMDD.扩展名'"""
+    directory, filename = os.path.split(file_path)
+    name, ext = os.path.splitext(filename)
+
+    date_str = get_file_date(file_path)
+    new_name = f"{date_str}{ext}"
+    new_path = os.path.join(directory, new_name)
+
+    # 避免重名
+    counter = 1
+    while os.path.exists(new_path):
+        new_name = f"{date_str}_{counter}{ext}"
+        new_path = os.path.join(directory, new_name)
+        counter += 1
+
+    os.rename(file_path, new_path)
+    print(f"📌 重命名: {filename} -> {new_name}")
+    return new_name  # 返回新文件名
+
+
+def classify_and_rename(directory):
+    """批量重命名文件并分类存储"""
+    for filename in os.listdir(directory):
+        file_path = os.path.join(directory, filename)
+
+        # 确保是文件
+        if os.path.isfile(file_path):
+            matches = pattern.findall(filename)  # 先尝试从文件名中匹配日期
+
+            if matches:
+                year, month, day = matches[-1]  # 取最后一个匹配到的日期
+            else:
+                # 文件名没有日期信息，使用创建时间
+                date_str = get_file_date(file_path)
+                year, month = date_str[:4], date_str[4:6]
+
+                # 先重命名文件
+                new_filename = rename_file(file_path)
+                file_path = os.path.join(directory, new_filename)  # 更新文件路径
+                filename = new_filename  # 更新文件名
+
+            # **检查年份和月份是否合理**
+            if not (1900 <= int(year) <= 2100):  # 避免异常年份
+                print(f"❌ 文件 {filename} 的年份 {year} 不在合理范围, 跳过.")
+                continue
+
+            if not (1 <= int(month) <= 12):  # 避免异常月份
+                print(f"❌ 文件 {filename} 的月份 {month} 不在合理范围, 跳过.")
+                continue
+
+            print(f"✅ 分类: {filename} -> {year}/{month}")
+
+            # 目标目录
+            month_folder = os.path.join(destination_folder, year, month)
+            os.makedirs(month_folder, exist_ok=True)  # 创建目录
+
+            # 移动文件
+            try:
+                shutil.move(file_path, os.path.join(month_folder, filename))
+            except Exception as e:
+                print(f"⚠️ 移动 {filename} 时出错: {e}")
+
+
+if __name__ == "__main__":
+    classify_and_rename(source_folder)
